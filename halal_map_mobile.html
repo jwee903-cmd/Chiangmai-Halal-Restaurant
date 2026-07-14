@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Halal Restaurants — Nimman, Chiang Mai</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --gold: #C8963E;
+    --gold-light: #F5D08A;
+    --gold-pale: #FDF6E3;
+    --emerald: #1A3A2A;
+    --emerald-mid: #24503A;
+    --cream: #FAF6EF;
+    --text: #1C1C1C;
+    --shadow: 0 4px 24px rgba(0,0,0,0.18);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+    background: var(--emerald);
+    color: var(--text);
+    touch-action: manipulation;
+  }
+
+  /* ─── Top Header ─── */
+  #header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    background: var(--emerald);
+    padding: 12px 16px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  .header-icon {
+    font-size: 22px;
+    animation: sway 6s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes sway { 0%,100%{transform:rotate(-8deg)} 50%{transform:rotate(8deg)} }
+
+  .header-text h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    color: var(--gold-light);
+    line-height: 1.2;
+  }
+  .header-text p {
+    font-size: 0.62rem;
+    color: rgba(245,208,138,0.55);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+
+  .header-badge {
+    margin-left: auto;
+    background: var(--gold);
+    color: var(--emerald);
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ─── Map ─── */
+  #map {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 0;
+  }
+
+  /* ─── Bottom Sheet ─── */
+  #sheet {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 500;
+    background: #fff;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -4px 30px rgba(0,0,0,0.18);
+    transition: height 0.35s cubic-bezier(0.4,0,0.2,1);
+    height: 52px;
+    overflow: hidden;
+    padding-bottom: var(--safe-bottom);
+  }
+
+  #sheet.expanded { height: 64vh; }
+  #sheet.peek { height: 52px; }
+
+  /* Handle */
+  #sheet-handle {
+    width: 100%;
+    padding: 0 16px;
+    height: 52px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    cursor: pointer;
+    background: #fff;
+    border-bottom: 1px solid rgba(200,150,62,0.1);
+    flex-shrink: 0;
+  }
+
+  .handle-bar { display: none; }
+
+  .handle-label {
+    font-size: 0.68rem;
+    color: var(--gold);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .handle-chevron {
+    font-size: 1rem;
+    color: var(--gold);
+    line-height: 1;
+    transition: transform 0.3s;
+  }
+
+  #sheet-scroll {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    height: calc(100% - 52px);
+    padding: 8px 12px 20px;
+    scrollbar-width: none;
+  }
+  #sheet-scroll::-webkit-scrollbar { display: none; }
+
+  /* Restaurant Card */
+  .rcard {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    background: var(--cream);
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: all 0.22s;
+    opacity: 0;
+    animation: fadein 0.4s forwards;
+  }
+  .rcard.active {
+    border-color: var(--gold);
+    background: var(--gold-pale);
+    box-shadow: 0 3px 16px rgba(200,150,62,0.2);
+  }
+  @keyframes fadein { to { opacity: 1; } }
+
+  .rcard-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--emerald);
+    color: var(--gold-light);
+    font-size: 0.72rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .rcard.active .rcard-num { background: var(--gold); color: var(--emerald); }
+
+  .rcard-body { flex: 1; min-width: 0; }
+
+  .rcard-name {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.3;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rcard-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .rcard-stars { color: var(--gold); font-size: 0.62rem; }
+  .rcard-rating { font-size: 0.72rem; font-weight: 600; color: var(--gold); }
+  .rcard-rev { font-size: 0.62rem; color: #999; }
+
+  .rcard-tag {
+    padding: 1px 7px;
+    background: rgba(200,150,62,0.12);
+    color: var(--gold);
+    font-size: 0.58rem;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .rcard-price { font-size: 0.62rem; color: #888; }
+  .rcard-addr { font-size: 0.62rem; color: #aaa; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .rcard-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(200,150,62,0.12);
+  }
+
+  .gmap-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 11px;
+    border-radius: 20px;
+    background: var(--emerald);
+    color: var(--gold-light);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    border: 1.5px solid rgba(200,150,62,0.35);
+    transition: all 0.2s;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .gmap-btn:hover, .gmap-btn:active {
+    background: var(--gold);
+    color: var(--emerald);
+    border-color: var(--gold);
+  }
+  .gmap-btn svg { flex-shrink: 0; }
+
+  /* ─── FAB Controls ─── */
+  #fab-group {
+    position: fixed;
+    left: 14px;
+    bottom: 130px;
+    z-index: 600;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .fab {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    transition: transform 0.2s, box-shadow 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .fab:active { transform: scale(0.92); }
+  .fab-primary { background: var(--gold); color: var(--emerald); font-size: 18px; }
+  .fab-secondary { background: var(--emerald); color: var(--gold-light); font-size: 14px; border: 1.5px solid rgba(200,150,62,0.4); }
+
+  /* ─── Progress bar ─── */
+  #progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--gold), var(--gold-light));
+    z-index: 2000;
+    transition: width 0.5s;
+    width: 0%;
+  }
+
+  /* ─── Popup override ─── */
+  .leaflet-popup-content-wrapper {
+    border-radius: 14px;
+    padding: 0;
+    overflow: hidden;
+    border: 2px solid var(--gold);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    max-width: 210px;
+  }
+  .leaflet-popup-content { margin: 0; width: 100% !important; }
+  .leaflet-popup-tip-container { display: none; }
+
+  .popup-wrap {
+    background: var(--emerald);
+    padding: 12px 13px;
+    color: var(--gold-light);
+  }
+  .popup-num {
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    margin-bottom: 2px;
+  }
+  .popup-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.88rem;
+    line-height: 1.3;
+    margin-bottom: 5px;
+  }
+  .popup-stars { color: var(--gold); font-size: 0.65rem; }
+  .popup-rating { font-size: 0.75rem; font-weight: 600; color: var(--gold); }
+  .popup-reviews { font-size: 0.62rem; opacity: 0.55; }
+  .popup-cuisine { font-size: 0.62rem; letter-spacing: 0.07em; text-transform: uppercase; opacity: 0.65; margin-top: 4px; }
+  .popup-price { font-size: 0.7rem; margin-top: 2px; }
+  .popup-addr { font-size: 0.62rem; opacity: 0.6; margin-top: 3px; }
+
+  .popup-gmap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 7px 0 2px;
+    border-top: 1px solid rgba(200,150,62,0.2);
+    text-decoration: none;
+    color: var(--gold);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    transition: color 0.2s;
+  }
+  .popup-gmap:hover { color: var(--gold-light); }
+
+  /* ─── Marker ─── */
+  .m-pin {
+    width: 32px; height: 32px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--gold);
+    background: var(--emerald);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+    transition: transform 0.2s;
+  }
+  .m-pin.active { background: var(--gold); transform: rotate(-45deg) scale(1.25); }
+  .m-pin-num {
+    transform: rotate(45deg);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--gold-light);
+  }
+  .m-pin.active .m-pin-num { color: var(--emerald); }
+
+
+  /* ─── Leaflet zoom styling ─── */
+  .leaflet-control-zoom {
+    border: none !important;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3) !important;
+    border-radius: 10px !important;
+    overflow: hidden;
+  }
+  .leaflet-control-zoom a {
+    background: var(--emerald) !important;
+    color: var(--gold-light) !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(200,150,62,0.2) !important;
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    font-size: 18px !important;
+    font-weight: 300 !important;
+    transition: background 0.2s !important;
+  }
+  .leaflet-control-zoom a:hover {
+    background: #24503A !important;
+    color: var(--gold) !important;
+  }
+  .leaflet-control-zoom-in { border-radius: 10px 10px 0 0 !important; }
+  .leaflet-control-zoom-out { border-radius: 0 0 10px 10px !important; border-bottom: none !important; }
+
+  /* Leaflet tile de-saturate on mobile for readability */
+  .leaflet-tile-pane { filter: saturate(0.8); }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<div id="header">
+  <span class="header-icon">☪️</span>
+  <div class="header-text">
+    <h1>Halal Restaurants</h1>
+    <p>Nimman Road · Chiang Mai</p>
+  </div>
+  <div class="header-badge" id="counter-badge">0 / 20</div>
+</div>
+
+<div id="map"></div>
+
+<div id="fab-group">
+  <button class="fab fab-primary" onclick="animateAll()" title="Animate all">▶</button>
+  <button class="fab fab-secondary" onclick="resetAll()" title="Reset">↺</button>
+  <button class="fab fab-secondary" onclick="fitAll()" title="Fit all">⊞</button>
+</div>
+
+<div id="sheet">
+  <div id="sheet-handle" onclick="toggleSheet()">
+    <div class="handle-label" id="handle-lbl">☪ Tap to see all restaurants</div>
+    <span class="handle-chevron" id="handle-chevron">▲</span>
+  </div>
+  <div id="sheet-scroll">
+    <div id="card-list"></div>
+  </div>
+</div>
+
+<script>
+function gmapUrl(name, lat, lng) {
+  // Opens Google Maps with the place name search anchored to exact coordinates
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + ' Chiang Mai')}&ll=${lat},${lng}`;
+}
+
+const restaurants = [
+  { name:"Chai 'N' Thai @ Nimman Indian", lat:18.7993, lng:98.9680, rating:4.9, reviews:"3.3K", cuisine:"Indian", price:"฿200–400", addr:"20 Nimmana Haeminda Rd Lane 9" },
+  { name:"Thai Halal & Vegan มรกฎ", lat:18.8002, lng:98.9672, rating:4.8, reviews:"256", cuisine:"Halal/Vegan", price:"฿200–400", addr:"32/2 Nimmanahaeminda Rd" },
+  { name:"Chaba Burger Kadmanee (Halal)", lat:18.8040, lng:98.9765, rating:4.8, reviews:"76", cuisine:"Halal Burgers", price:"฿100–200", addr:"185 Thipanet Rd" },
+  { name:"Peshawar Restaurant (Halal)", lat:18.7800, lng:98.9940, rating:4.7, reviews:"804", cuisine:"Pakistani", price:"฿200–400", addr:"169/2 Sridonchai Rd" },
+  { name:"Nara Thai Cuisine", lat:18.8030, lng:98.9680, rating:4.6, reviews:"1.3K", cuisine:"Thai", price:"฿400–1,400", addr:"1 Nimman Road" },
+  { name:"Egyptian Kings Express–Nimman", lat:18.7985, lng:98.9660, rating:4.6, reviews:"10", cuisine:"Arab", price:"฿400–600", addr:"35 Nimmanhaemin Rd" },
+  { name:"โฮงซา Hong Cha Halal", lat:18.7955, lng:98.9620, rating:4.6, reviews:"78", cuisine:"Halal", price:"฿1–200", addr:"3/1 Nimmanhaemin Soi 17" },
+  { name:"Halal Food", lat:18.7970, lng:98.9650, rating:4.6, reviews:"17", cuisine:"Halal", price:"฿1–100", addr:"Nimman Area" },
+  { name:"Rock Me Burger & Bar Nimman", lat:18.7998, lng:98.9683, rating:4.5, reviews:"1.5K", cuisine:"Burgers", price:"฿200–400", addr:"12-14 Nimmana Haeminda Rd Ln 15" },
+  { name:"Fresh Harvest Farm Chiang Mai", lat:18.8010, lng:98.9678, rating:4.5, reviews:"525", cuisine:"Restaurant", price:"฿200–1,200", addr:"6, 25 Nimmanahaeminda Rd" },
+  { name:"Takawa Halal Cuisine", lat:18.7960, lng:98.9700, rating:4.5, reviews:"384", cuisine:"Halal", price:"฿200–400", addr:"Chiang Mai Land 10 Alley" },
+  { name:"Ruammit Halal Restaurant", lat:18.7830, lng:98.9920, rating:4.5, reviews:"362", cuisine:"Halal", price:"฿200–400", addr:"170/7 Changklan Rd" },
+  { name:"Ya & Da Corner (Halal Food)", lat:18.8095, lng:98.9790, rating:4.5, reviews:"106", cuisine:"Halal", price:"฿1–200", addr:"40-42 Chang Phueak Rd" },
+  { name:"Yaring Cuisine", lat:18.7900, lng:98.9950, rating:4.5, reviews:"174", cuisine:"Halal", price:"฿100–200", addr:"37 Chang Moi Kao Rd" },
+  { name:"Khao Soi Islam Restaurant", lat:18.7850, lng:99.0020, rating:4.4, reviews:"1.8K", cuisine:"Halal", price:"฿1–200", addr:"24 Charoen Prathet Rd" },
+  { name:"Food Exchange at Novotel", lat:18.8020, lng:98.9655, rating:4.1, reviews:"14", cuisine:"Restaurant", price:"฿300–400", addr:"Novotel Chiang Mai Nimman" },
+  { name:"GINGER FARM at ONENIMMAN", lat:18.8005, lng:98.9663, rating:4.3, reviews:"3.1K", cuisine:"Restaurant", price:"฿400–1,000", addr:"One Nimman, Nimmanahaeminda Rd" },
+  { name:"Little Istanbul", lat:18.7825, lng:98.9935, rating:4.0, reviews:"814", cuisine:"Turkish", price:"฿200–400", addr:"149/24 Changklan Rd" },
+  { name:"Kiew Kai Ka I One Nimman", lat:18.8003, lng:98.9660, rating:3.8, reviews:"903", cuisine:"Restaurant", price:"฿200–1,000", addr:"One Nimman, 1 Nimmanahaeminda Rd" },
+  { name:"Halalfood Roummit 2", lat:18.7840, lng:98.9930, rating:3.7, reviews:"173", cuisine:"Halal", price:"฿1–200", addr:"31 Night Bazaar Area" },
+].map(r => ({ ...r, gmap: gmapUrl(r.name, r.lat, r.lng) }));
+
+function stars(r) {
+  return '★'.repeat(Math.floor(r)) + (r%1>=0.5?'½':'') + '☆'.repeat(5-Math.floor(r)-(r%1>=0.5?1:0));
+}
+
+// Map init
+const map = L.map('map', { center:[18.795,98.982], zoom:14, zoomControl:false });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'© OpenStreetMap', maxZoom:19
+}).addTo(map);
+L.control.zoom({ position:'bottomleft' }).addTo(map);
+
+// After header height
+map.getContainer().style.top = '0';
+
+const markers = [];
+let activeIdx = null;
+let sheetOpen = false;
+let animating = false;
+let animT = null;
+
+// Build sidebar cards
+const list = document.getElementById('card-list');
+restaurants.forEach((r,i) => {
+  const d = document.createElement('div');
+  d.className = 'rcard';
+  d.id = `rc-${i}`;
+  d.style.animationDelay = `${i*0.03}s`;
+  d.innerHTML = `
+    <div class="rcard-num">${i+1}</div>
+    <div class="rcard-body">
+      <div class="rcard-name">${r.name}</div>
+      <div class="rcard-row">
+        <span class="rcard-stars">${stars(r.rating)}</span>
+        <span class="rcard-rating">${r.rating}</span>
+        <span class="rcard-rev">(${r.reviews})</span>
+        <span class="rcard-tag">${r.cuisine}</span>
+        <span class="rcard-price">${r.price}</span>
+      </div>
+      <div class="rcard-addr">📍 ${r.addr}</div>
+      <div class="rcard-footer">
+        <a class="gmap-btn" href="${r.gmap}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          Open in Google Maps
+        </a>
+        <span style="font-size:0.6rem;color:#ccc;">↗ new tab</span>
+      </div>
+    </div>`;
+  d.addEventListener('click', () => { focusR(i); });
+  list.appendChild(d);
+});
+
+function makeIcon(i, active=false) {
+  const pal = ['#C8963E','#2E7D52','#C0392B','#8E44AD','#1A6B8A','#D35400','#27AE60','#E74C3C','#2980B9','#F39C12','#16A085','#8E44AD','#C8963E','#2C3E50','#E67E22','#1ABC9C','#E74C3C','#3498DB','#F1C40F','#95A5A6'];
+  const c = pal[i % pal.length];
+  return L.divIcon({
+    html:`<div class="m-pin ${active?'active':''}" style="background:${active?c:'#1A3A2A'};border-color:${c}"><div class="m-pin-num" style="color:${active?'#1A3A2A':c}">${i+1}</div></div>`,
+    className:'', iconSize:[32,32], iconAnchor:[16,32], popupAnchor:[0,-34]
+  });
+}
+
+function popupHtml(r,i) {
+  return `<div class="popup-wrap">
+    <div class="popup-num">Restaurant ${i+1} of ${restaurants.length}</div>
+    <div class="popup-name">${r.name}</div>
+    <div style="display:flex;align-items:center;gap:5px;margin-top:3px">
+      <span class="popup-stars">${stars(r.rating)}</span>
+      <span class="popup-rating">${r.rating}</span>
+      <span class="popup-reviews">(${r.reviews} reviews)</span>
+    </div>
+    <div class="popup-cuisine">${r.cuisine}</div>
+    <div class="popup-price">${r.price}</div>
+    <div class="popup-addr">📍 ${r.addr}</div>
+    <a class="popup-gmap" href="${r.gmap}" target="_blank" rel="noopener">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Open in Google Maps
+    </a>
+  </div>`;
+}
+
+function addMarker(i) {
+  const r = restaurants[i];
+  const m = L.marker([r.lat, r.lng], { icon: makeIcon(i,false) })
+    .addTo(map)
+    .bindPopup(popupHtml(r,i), { maxWidth:220, closeButton:false });
+  m.on('click', () => focusR(i));
+  const el = m.getElement();
+  if(el) {
+    el.style.opacity='0'; el.style.transform='scale(0)'; el.style.transition='opacity 0.35s,transform 0.35s';
+    requestAnimationFrame(()=>{ el.style.opacity='1'; el.style.transform='scale(1)'; });
+  }
+  markers[i] = m;
+}
+
+function focusR(i) {
+  if(activeIdx!==null && markers[activeIdx]) {
+    markers[activeIdx].setIcon(makeIcon(activeIdx,false));
+    markers[activeIdx].closePopup();
+    document.getElementById(`rc-${activeIdx}`)?.classList.remove('active');
+  }
+  activeIdx = i;
+  if(markers[i]) {
+    markers[i].setIcon(makeIcon(i,true));
+    markers[i].openPopup();
+    map.panTo([restaurants[i].lat, restaurants[i].lng], {animate:true,duration:0.5});
+  }
+  const card = document.getElementById(`rc-${i}`);
+  if(card) {
+    card.classList.add('active');
+    card.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+  if(!sheetOpen) openSheet();
+}
+
+function openSheet() {
+  sheetOpen = true;
+  document.getElementById('sheet').classList.add('expanded');
+  document.getElementById('sheet').classList.remove('peek');
+  document.getElementById('handle-lbl').textContent = '▾ All Halal Restaurants';
+  document.getElementById('handle-chevron').style.transform = 'rotate(180deg)';
+}
+
+function closeSheet() {
+  sheetOpen = false;
+  document.getElementById('sheet').classList.remove('expanded');
+  document.getElementById('sheet').classList.add('peek');
+  document.getElementById('handle-lbl').textContent = '☪ Tap to see all restaurants';
+  document.getElementById('handle-chevron').style.transform = 'rotate(0deg)';
+}
+
+function toggleSheet() {
+  sheetOpen ? closeSheet() : openSheet();
+}
+
+function animateAll() {
+  if(animating) return;
+  resetAll();
+  animating = true;
+  let i = 0;
+  function next() {
+    if(i >= restaurants.length) { animating=false; return; }
+    addMarker(i);
+    updateBadge(i+1);
+    updateProgress(((i+1)/restaurants.length)*100);
+    focusR(i);
+    i++;
+    animT = setTimeout(next, 550);
+  }
+  next();
+}
+
+function resetAll() {
+  if(animT) clearTimeout(animT);
+  animating = false;
+  markers.forEach((m,i) => { if(m) { map.removeLayer(m); markers[i]=null; } });
+  markers.length = 0;
+  activeIdx = null;
+  document.querySelectorAll('.rcard').forEach(c=>c.classList.remove('active'));
+  updateBadge(0);
+  updateProgress(0);
+  map.setView([18.795,98.982],14);
+  closeSheet();
+}
+
+function fitAll() {
+  const ll = restaurants.map(r=>[r.lat,r.lng]);
+  map.fitBounds(ll,{padding:[60,60]});
+}
+
+function updateBadge(n) {
+  document.getElementById('counter-badge').textContent = `${n} / ${restaurants.length}`;
+}
+function updateProgress(p) {
+  document.getElementById('progress').style.width = p+'%';
+}
+
+// Auto-start
+setTimeout(()=>animateAll(), 700);
+</script>
+</body>
+</html>
